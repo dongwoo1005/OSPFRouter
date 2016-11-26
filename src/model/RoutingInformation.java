@@ -25,7 +25,7 @@ public class RoutingInformation {
     }
 
     public void setPath(int path) {
-        this.path = cost;
+        this.path = path;
     }
 
     public void setCost(int cost) {

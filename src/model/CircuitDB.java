@@ -2,6 +2,7 @@ package model;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.HashSet;
 
 /**
  * OSPFRouter
@@ -16,13 +17,14 @@ public class CircuitDB {
     private int nbrLink;
     private LinkCost[] linkCosts = new LinkCost[NBR_ROUTER];
 
-    private boolean[] receivedHello;
+//    private boolean[] receivedHello;
+    HashSet<Integer> receivedHello;
 
     public CircuitDB(int nbrLink, LinkCost[] linkCosts) {
         this.nbrLink = nbrLink;
         this.linkCosts = linkCosts;
 
-        receivedHello = new boolean[NBR_ROUTER];
+        receivedHello = new HashSet<>();
     }
 
     public int getNbrLink() {
@@ -38,15 +40,15 @@ public class CircuitDB {
     }
 
     public boolean didReceiveHelloFrom(int linkId) {
-        return receivedHello[linkId - 1];
+        return receivedHello.contains(linkId);
     }
 
     public void setReceivedHelloFrom(int linkId) {
-        receivedHello[linkId - 1] = true;
+        receivedHello.add(linkId);
     }
 
     public void putLinkCost(LinkCost linkCost) {
-        for (int i=0; i<NBR_ROUTER; i+=1) {
+        for (int i=0; i<nbrLink; i+=1) {
             if (linkCosts[i].getLink() == linkCost.getLink()) {
                 linkCosts[i].setCost(linkCost.getCost());
                 return;

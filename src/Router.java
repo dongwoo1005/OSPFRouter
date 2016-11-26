@@ -3,6 +3,7 @@ import model.*;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -20,7 +21,8 @@ public class Router {
     private static int routerId, nsePort, routerPort;
     private static String nseHost;
 
-    private static BufferedWriter logWriter = null;
+//    private static BufferedWriter logWriter = null;
+    private static PrintWriter logWriter = null;
 
     private static CircuitDB circuitDB;
     private static CircuitDB[] linkStateDB;
@@ -47,7 +49,8 @@ public class Router {
         File logFile = new File(logFileName);
         if (logFile.exists()) logFile.delete();
         logFile.createNewFile();
-        logWriter = Files.newBufferedWriter(Paths.get(logFileName), StandardOpenOption.WRITE);
+//        logWriter = Files.newBufferedWriter(Paths.get(logFileName), StandardOpenOption.WRITE);
+        logWriter = new PrintWriter(logFileName, "UTF-8");
 
         linkStateDB = new CircuitDB[CircuitDB.NBR_ROUTER];
 
@@ -64,7 +67,9 @@ public class Router {
             DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipAddress, nsePort);
             udpSocket.send(sendPacket);
 
-            logWriter.write(message);
+//            logWriter.write(message);
+            logWriter.println(message);
+            System.out.println(message);
 
         } catch (UnknownHostException e) {
             e.printStackTrace();
@@ -82,6 +87,7 @@ public class Router {
 
         DatagramSocket udpSocket = new DatagramSocket(routerPort);
         byte[] receiveData = new byte[1024];
+        String logMessage;
 
         // First
         // Each router must send an INIT packet to the NSE (Network State Emulator)
@@ -95,14 +101,20 @@ public class Router {
         DatagramPacket receiveCircuitDBPacket = new DatagramPacket(receiveData, receiveData.length);
         udpSocket.receive(receiveCircuitDBPacket);            // wait until received
         circuitDB = CircuitDB.parseUDPdata(receiveData);
-        logWriter.write("R" + routerId + " receives a circuitDB");
+
+        logMessage = "R" + routerId + " receives a circuitDB";
+//        logWriter.write(logMessage);
+        logWriter.println(logMessage);
+        System.out.println(logMessage);
 
         linkStateDB[routerId - 1] = circuitDB;
 
         // Then each router must send a HELLO packet to all its neighbors.
         for (int i=0; i<circuitDB.getNbrLink(); i+=1) {
-            HelloPacket sendHelloPacket = new HelloPacket(routerId, circuitDB.getLinkCostAt(i).getLink());
-            sendPacket(udpSocket, sendHelloPacket, "R" + routerId + " sends a HELLO");
+            int linkId = circuitDB.getLinkCostAt(i).getLink();
+            HelloPacket sendHelloPacket = new HelloPacket(routerId, linkId);
+            logMessage = "R" + routerId + " sends a HELLO: linkId " + linkId;
+            sendPacket(udpSocket, sendHelloPacket, logMessage);
         }
 
         // Each router will respond to each HELLO packet by a set of LS PDUs containing its circuit database.
@@ -115,7 +127,10 @@ public class Router {
 
                 // Receive HELLO packet
                 HelloPacket helloPacket = HelloPacket.parseUDPdata(receiveData);
-                logWriter.write("R" + routerId + " receives a HELLO");
+                logMessage = "R" + routerId + " receives a HELLO from R" + helloPacket.getRouterId() + " via L" + helloPacket.getLinkId();
+//                logWriter.write(logMessage);
+                logWriter.println(logMessage);
+                System.out.println(logMessage);
 
                 // Update RIB
                 routingInformationBase.setPath(helloPacket.getRouterId(), helloPacket.getRouterId());
@@ -125,19 +140,26 @@ public class Router {
 
                 // Respond by sending a LSPDU packet
                 for (int i=0; i<circuitDB.getNbrLink(); i+=1) {
+                    int linkId = circuitDB.getLinkCostAt(i).getLink();
+                    int cost = circuitDB.getLinkCostAt(i).getCost();
+                    int via = helloPacket.getLinkId();
                     LSPDUPacket sendLSPDUPacket =
-                            new LSPDUPacket(routerId, routerId, circuitDB.getLinkCostAt(i).getLink(),
-                                    circuitDB.getLinkCostAt(i).getCost(), helloPacket.getLinkId());
-                    sendPacket(udpSocket, sendLSPDUPacket, "R" + routerId + " sends an LS PDU");
+                            new LSPDUPacket(routerId, routerId, linkId, cost, via);
+                    logMessage = "R" + routerId + " sends an LS PDU: sender " + routerId + ", routerId " + routerId
+                            + ", linkId " + linkId + ", cost " + cost + ", via " + via;
+                    sendPacket(udpSocket, sendLSPDUPacket, logMessage);
                 }
 
             } else if (receivePacket.getLength() == 20) {
 
                 // Receive LS PDU packet
                 LSPDUPacket lspduPacket = LSPDUPacket.parseUDPdata(receiveData);
-                logWriter.write("R" + routerId + " receives an LS PDU: sender " + lspduPacket.getSender()
+                logMessage = "R" + routerId + " receives an LS PDU: sender " + lspduPacket.getSender()
                         + ", routerId " + lspduPacket.getRouterId() + ", linkId " + lspduPacket.getLinkId()
-                        + ", cost " + lspduPacket.getCost() + ", via " + lspduPacket.getVia());
+                        + ", cost " + lspduPacket.getCost() + ", via " + lspduPacket.getVia();
+//                logWriter.write(logMessage);
+                logWriter.println(logMessage);
+                System.out.println(logMessage);
 
                 // Update its link state database
                 LinkCost linkCost = new LinkCost(lspduPacket.getLinkId(), lspduPacket.getCost());
@@ -187,7 +209,7 @@ public class Router {
                     if (linkId == lspduPacket.getVia() || !circuitDB.didReceiveHelloFrom(linkId)) continue;
                     lspduPacket.setSender(routerId);
                     lspduPacket.setVia(linkId);
-                    String logMessage = "R" + routerId + " sends an LS PDU: sender " + lspduPacket.getSender()
+                    logMessage = "R" + routerId + " sends an LS PDU: sender " + lspduPacket.getSender()
                             + ", routerId " + lspduPacket.getRouterId() + ", linkId " + lspduPacket.getLinkId()
                             + ", cost " + lspduPacket.getCost() + ", via " + lspduPacket.getVia();
                     sendPacket(udpSocket, lspduPacket, logMessage);
