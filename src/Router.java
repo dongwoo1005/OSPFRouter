@@ -36,6 +36,8 @@ public class Router {
 
     private static void initialize(String[] args) throws IOException {
 
+        System.out.println("Begin Initializing");
+
         routerId = Integer.valueOf(args[0]);
         nseHost = args[1];
         nsePort = Integer.valueOf(args[2]);
