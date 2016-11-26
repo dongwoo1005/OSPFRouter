@@ -4,7 +4,10 @@
 # User-specific stuff:
 .idea/workspace.xml
 .idea/tasks.xml
-
+src/*.class
+src/model/*.class
+src/*.log
+src/router
 # Sensitive or high-churn files:
 .idea/dataSources/
 .idea/dataSources.ids
