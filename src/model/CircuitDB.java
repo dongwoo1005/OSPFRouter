@@ -91,4 +91,27 @@ public class CircuitDB {
         }
         return cost;
     }
+
+    public String toString(int routerId, int destRouterId) {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("R");
+        stringBuilder.append(routerId);
+        stringBuilder.append(" -> R");
+        stringBuilder.append(destRouterId);
+        stringBuilder.append(" nbr link ");
+        stringBuilder.append(nbrLink);
+        stringBuilder.append("\n");
+        for (int i=0; i<nbrLink; i+=1) {
+            stringBuilder.append("R");
+            stringBuilder.append(routerId);
+            stringBuilder.append(" -> R");
+            stringBuilder.append(destRouterId);
+            stringBuilder.append(" link ");
+            stringBuilder.append(linkCosts[i].getLink());
+            stringBuilder.append(" cost ");
+            stringBuilder.append(linkCosts[i].getCost());
+            stringBuilder.append("\n");
+        }
+        return stringBuilder.toString();
+    }
 }

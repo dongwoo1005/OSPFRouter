@@ -8,6 +8,8 @@ package model;
  */
 public class RoutingInformation {
 
+    public static final int LOCAL = -1;
+
     private int path;   // adjacent routerId
     private int cost;
 
@@ -30,5 +32,17 @@ public class RoutingInformation {
 
     public void setCost(int cost) {
         this.cost = cost;
+    }
+
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        if (path == LOCAL) stringBuilder.append("Local, ");
+        else {
+            stringBuilder.append("R");
+            stringBuilder.append(path);
+            stringBuilder.append(", ");
+        }
+        stringBuilder.append(cost);
+        return stringBuilder.toString();
     }
 }

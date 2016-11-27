@@ -8,15 +8,16 @@ package model;
  */
 public class RoutingInformationBase {
 
-    RoutingInformation[] routingInformationBase;
+    private int routerId;
+    private RoutingInformation[] routingInformationBase;
 
     public RoutingInformationBase(int routerId) {
-        routingInformationBase = new RoutingInformation[6];
-        routingInformationBase[routerId - 1] = new RoutingInformation(routerId, 0);
+        this.routerId = routerId;
+        routingInformationBase = new RoutingInformation[CircuitDB.NBR_ROUTER];
+        routingInformationBase[routerId - 1] = new RoutingInformation(RoutingInformation.LOCAL, 0);
     }
 
     public void setPath(int destRouter, int pathRouter) {
-        System.out.println("setPath: " + destRouter + " " + pathRouter);
         if (routingInformationBase[destRouter - 1] == null) {
             routingInformationBase[destRouter - 1] = new RoutingInformation(pathRouter, Integer.MAX_VALUE);
         } else {
@@ -33,5 +34,21 @@ public class RoutingInformationBase {
 
     public int getCostToDest(int destRouter) {
         return routingInformationBase[destRouter-1].getCost();
+    }
+
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("# RIB\n");
+        for (int i=0; i<CircuitDB.NBR_ROUTER; i+=1) {
+            stringBuilder.append("R");
+            stringBuilder.append(routerId);
+            stringBuilder.append(" -> R");
+            stringBuilder.append(i+1);
+            stringBuilder.append(" -> ");
+            if (routingInformationBase[i] == null) stringBuilder.append("INF");
+            else stringBuilder.append(routingInformationBase[i].toString());
+            stringBuilder.append("\n");
+        }
+        return stringBuilder.toString();
     }
 }

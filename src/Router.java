@@ -1,14 +1,9 @@
 import model.*;
 
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.util.HashSet;
 
 /**
  * OSPFRouter
@@ -21,11 +16,10 @@ public class Router {
     private static int routerId, nsePort, routerPort;
     private static String nseHost;
 
-//    private static BufferedWriter logWriter = null;
     private static PrintWriter logWriter = null;
 
     private static CircuitDB circuitDB;
-    private static CircuitDB[] linkStateDB;
+    private static LinkStateDB linkStateDB;
     private static RoutingInformationBase routingInformationBase;    // RIB
 
     private static void checkArgs(String[] args) {
@@ -38,8 +32,6 @@ public class Router {
 
     private static void initialize(String[] args) throws IOException {
 
-        System.out.println("Begin Initializing");
-
         routerId = Integer.valueOf(args[0]);
         nseHost = args[1];
         nsePort = Integer.valueOf(args[2]);
@@ -49,10 +41,10 @@ public class Router {
         File logFile = new File(logFileName);
         if (logFile.exists()) logFile.delete();
         logFile.createNewFile();
-//        logWriter = Files.newBufferedWriter(Paths.get(logFileName), StandardOpenOption.WRITE);
         logWriter = new PrintWriter(logFileName, "UTF-8");
 
-        linkStateDB = new CircuitDB[CircuitDB.NBR_ROUTER];
+//        linkStateDB = new CircuitDB[CircuitDB.NBR_ROUTER];
+        linkStateDB = new LinkStateDB(routerId);
 
         routingInformationBase = new RoutingInformationBase(routerId);
     }
@@ -67,7 +59,6 @@ public class Router {
             DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, ipAddress, nsePort);
             udpSocket.send(sendPacket);
 
-//            logWriter.write(message);
             logWriter.println(message);
             System.out.println(message);
 
@@ -78,6 +69,13 @@ public class Router {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private static void printDBs() {
+        logWriter.println(routingInformationBase.toString());
+        System.out.println(routingInformationBase.toString());
+        logWriter.println(linkStateDB.toString());
+        System.out.println(linkStateDB.toString());
     }
 
     public static void main(String[] args) throws Exception {
@@ -103,11 +101,11 @@ public class Router {
         circuitDB = CircuitDB.parseUDPdata(receiveData);
 
         logMessage = "R" + routerId + " receives a circuitDB";
-//        logWriter.write(logMessage);
         logWriter.println(logMessage);
         System.out.println(logMessage);
 
-        linkStateDB[routerId - 1] = circuitDB;
+        linkStateDB.putCircuitDB(routerId, circuitDB);
+        printDBs();
 
         // Then each router must send a HELLO packet to all its neighbors.
         for (int i=0; i<circuitDB.getNbrLink(); i+=1) {
@@ -128,17 +126,17 @@ public class Router {
                 // Receive HELLO packet
                 HelloPacket helloPacket = HelloPacket.parseUDPdata(receiveData);
                 logMessage = "R" + routerId + " receives a HELLO from R" + helloPacket.getRouterId() + " via L" + helloPacket.getLinkId();
-//                logWriter.write(logMessage);
                 logWriter.println(logMessage);
                 System.out.println(logMessage);
 
                 // Update RIB
                 routingInformationBase.setPath(helloPacket.getRouterId(), helloPacket.getRouterId());
                 routingInformationBase.setCost(helloPacket.getRouterId(), circuitDB.findCostByLink(helloPacket.getLinkId()));
+                printDBs();
 
                 circuitDB.setReceivedHelloFrom(helloPacket.getLinkId());
 
-                // Respond by sending a LSPDU packet
+                // Respond by sending a LS PDU packet
                 for (int i=0; i<circuitDB.getNbrLink(); i+=1) {
                     int linkId = circuitDB.getLinkCostAt(i).getLink();
                     int cost = circuitDB.getLinkCostAt(i).getCost();
@@ -157,20 +155,13 @@ public class Router {
                 logMessage = "R" + routerId + " receives an LS PDU: sender " + lspduPacket.getSender()
                         + ", routerId " + lspduPacket.getRouterId() + ", linkId " + lspduPacket.getLinkId()
                         + ", cost " + lspduPacket.getCost() + ", via " + lspduPacket.getVia();
-//                logWriter.write(logMessage);
                 logWriter.println(logMessage);
                 System.out.println(logMessage);
 
                 // Update its link state database
                 LinkCost linkCost = new LinkCost(lspduPacket.getLinkId(), lspduPacket.getCost());
-                if (linkStateDB[lspduPacket.getRouterId() - 1] == null){
-                    LinkCost[] linkCosts = new LinkCost[CircuitDB.NBR_ROUTER];
-                    linkCosts[0] = linkCost;
-                    linkStateDB[lspduPacket.getRouterId() - 1] = new CircuitDB(1, linkCosts);
-                } else {
-                    CircuitDB currentDB = linkStateDB[lspduPacket.getRouterId() - 1];
-                    currentDB.putLinkCost(linkCost);
-                }
+                linkStateDB.putLinkState(lspduPacket.getRouterId(), linkCost);
+                printDBs();
 
 //                // Use the Dijkstra algorithm using its link state database
 //                // to determine the shortest (minimum) path cost to each destination R
@@ -203,22 +194,20 @@ public class Router {
 //                }
 
                 // Send to all its neighbors the LS PDU
-                for (int i=0; i<circuitDB.getNbrLink(); i+=1) {
-                    int linkId = circuitDB.getLinkCostAt(i).getLink();
-                    // except the one that sends the LS PDU and those from which the router did not receive a HELLO
-                    if (linkId == lspduPacket.getVia() || !circuitDB.didReceiveHelloFrom(linkId)) continue;
-                    lspduPacket.setSender(routerId);
-                    lspduPacket.setVia(linkId);
-                    logMessage = "R" + routerId + " sends an LS PDU: sender " + lspduPacket.getSender()
-                            + ", routerId " + lspduPacket.getRouterId() + ", linkId " + lspduPacket.getLinkId()
-                            + ", cost " + lspduPacket.getCost() + ", via " + lspduPacket.getVia();
-                    sendPacket(udpSocket, lspduPacket, logMessage);
-                }
+//                for (int i=0; i<circuitDB.getNbrLink(); i+=1) {
+//                    int linkId = circuitDB.getLinkCostAt(i).getLink();
+//                    // except the one that sends the LS PDU and those from which the router did not receive a HELLO
+//                    if (linkId == lspduPacket.getVia() || !circuitDB.didReceiveHelloFrom(linkId)) continue;
+//                    lspduPacket.setSender(routerId);
+//                    lspduPacket.setVia(linkId);
+//                    logMessage = "R" + routerId + " sends an LS PDU: sender " + lspduPacket.getSender()
+//                            + ", routerId " + lspduPacket.getRouterId() + ", linkId " + lspduPacket.getLinkId()
+//                            + ", cost " + lspduPacket.getCost() + ", via " + lspduPacket.getVia();
+//                    sendPacket(udpSocket, lspduPacket, logMessage);
+//                }
             }
         }
 
-        // The router program should generate a log file, named as router(id).log
-        // The routers must record in the log file all the messages that they receive and all messages that they send
         // They must also record their topology database every time this later changes
         // The log file should contain the corresponding RIB for each topology
         // Before each line of trace, the router must write its id
