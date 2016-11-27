@@ -1,4 +1,4 @@
-package model;
+package main.model;
 
 /**
  * OSPFRouter
@@ -33,6 +33,7 @@ public class RoutingInformationBase {
     }
 
     public int getCostToDest(int destRouter) {
+        if (routingInformationBase[destRouter-1] == null) return Integer.MAX_VALUE;
         return routingInformationBase[destRouter-1].getCost();
     }
 

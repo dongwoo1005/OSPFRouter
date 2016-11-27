@@ -8,6 +8,7 @@ src/*.class
 src/model/*.class
 src/*.log
 src/router
+sftp-config.json
 # Sensitive or high-churn files:
 .idea/dataSources/
 .idea/dataSources.ids

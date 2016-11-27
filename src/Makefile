@@ -6,10 +6,11 @@ all:
 	@echo 'java Router $(DOLLAR)1 $(DOLLAR)2 $(DOLLAR)3 $(DOLLAR)4' >> router
 	@chmod +x router
 
-	javac *.java model/*.java
+	javac main/*.java main/model/*.java
 
 clean:
 	rm -rf *.class
-	rm -rf model/*.class
 	rm -rf *.log
 	rm -rf router
+	rm -rf main/*.class
+	rm -rf main/model/*.class

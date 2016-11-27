@@ -1,4 +1,4 @@
-package model;
+package main.model;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -32,6 +32,17 @@ public class LinkCost {
 
     public void setCost(int cost) {
         this.cost = cost;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        LinkCost linkCost = (LinkCost) o;
+
+        if (link != linkCost.link) return false;
+        return cost == linkCost.cost;
     }
 
     public byte[] getUDPdata() {
