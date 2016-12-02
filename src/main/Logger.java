@@ -37,6 +37,7 @@ public class Logger {
 
     public void log(String message) {
         logWriter.println(message);
+        logWriter.flush();
         System.out.println(message);
     }
 }

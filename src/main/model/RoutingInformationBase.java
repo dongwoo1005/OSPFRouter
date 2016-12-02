@@ -30,13 +30,19 @@ public class RoutingInformationBase {
     public void setCost(int destRouter, int cost) {
         if (routingInformationBase[destRouter - 1] == null) {
             routingInformationBase[destRouter - 1] = new RoutingInformation(Integer.MAX_VALUE, cost);
+        } else {
+            routingInformationBase[destRouter - 1].setCost(cost);
         }
-        routingInformationBase[destRouter - 1].setCost(cost);
     }
 
     public int getCostToDest(int destRouter) {
         if (routingInformationBase[destRouter-1] == null) return Integer.MAX_VALUE;
         return routingInformationBase[destRouter-1].getCost();
+    }
+
+    public int getPath(int routerId) {
+        if (routingInformationBase[routerId-1] == null) return Integer.MAX_VALUE;
+        return routingInformationBase[routerId-1].getPath();
     }
 
     public String toString() {

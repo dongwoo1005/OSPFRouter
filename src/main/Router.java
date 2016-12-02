@@ -69,7 +69,8 @@ public class Router {
     }
 
     private static void printDBs() {
-        logger.log("\n" + linkStateDB.toString());
+        logger.log("");
+        logger.log(linkStateDB.toString());
         logger.log(routingInformationBase.toString());
     }
 
@@ -94,6 +95,8 @@ public class Router {
         logger.log(logMessage);
 
         linkStateDB.putCircuitDB(routerId, circuitDB);
+        logger.log("");
+        logger.log("## Update LinkStateDB");
         printDBs();
     }
 
@@ -117,9 +120,10 @@ public class Router {
 
     private static void updateRIBWithHello() {
         // Update RIB
-        logger.log("# update RIB with HELLO");
         routingInformationBase.setPath(helloPacket.getRouterId(), helloPacket.getRouterId());
         routingInformationBase.setCost(helloPacket.getRouterId(), circuitDB.findCostByLink(helloPacket.getLinkId()));
+        logger.log("");
+        logger.log("## Update RIB");
         printDBs();
     }
 
@@ -143,20 +147,19 @@ public class Router {
         logMessage = "R" + routerId + " : <--- LS PDU via link " + lspduPacket.getVia()
                 + " from router " + lspduPacket.getSender() + ": routerId " + lspduPacket.getRouterId()
                 + ", linkId " + lspduPacket.getLinkId() + ", cost " + lspduPacket.getCost();
-
-        // Update its link state database
-        LinkCost linkCost = new LinkCost(lspduPacket.getLinkId(), lspduPacket.getCost());
-        linkStateDBUpdated = linkStateDB.putLinkState(lspduPacket.getRouterId(), linkCost);
-        logMessage += linkStateDBUpdated ? " - Updated" : " - Duplicate";
-        logger.log(logMessage);
-        if (linkStateDBUpdated) printDBs();
     }
 
     private static void updateLinkStateDB() {
         // Update its link state database
         LinkCost linkCost = new LinkCost(lspduPacket.getLinkId(), lspduPacket.getCost());
         linkStateDBUpdated = linkStateDB.putLinkState(lspduPacket.getRouterId(), linkCost);
-        if (linkStateDBUpdated) printDBs();
+        logMessage += linkStateDBUpdated ? " - Updated" : " - Duplicate - Not Updated";
+        logger.log(logMessage);
+        if (linkStateDBUpdated) {
+            logger.log("");
+            logger.log("## Update LinkStateDB");
+            printDBs();
+        }
     }
 
     private static void sendNeighborsTheLSPDU() throws IOException {
@@ -165,7 +168,6 @@ public class Router {
             int linkId = circuitDB.getLinkCostAt(i).getLink();
             // except the one that sends the LS PDU and those from which the router did not receive a HELLO
             if (linkId == lspduPacket.getVia() || !circuitDB.didReceiveHelloFrom(linkId) ) continue;
-//            if (linkStateDB.isLinkNeighborOfRouter(linkId, lspduPacket.getRouterId())) continue;
             lspduPacket.setSender(routerId);
             lspduPacket.setVia(linkId);
             logMessage = "R" + routerId + " : ---> LS PDU via link " + lspduPacket.getVia()
@@ -179,47 +181,90 @@ public class Router {
         // Use the Dijkstra algorithm using its link state database
         // to determine the shortest (minimum) path cost to each destination R
 
+        // Initialization:
         HashSet<Integer> N = new HashSet<>();
         N.add(routerId);
+        RoutingInformationBase D = new RoutingInformationBase(routerId);    // cost to Destination with predecessor router
 
+        for (int v=1; v<=NBR_ROUTER; v+=1) {
+            if (routerId == v) continue;
+            LinkCost link = linkStateDB.findLinkBetween(routerId, v);
+            if (link != null) {     // if v adjacent to R routerId
+                D.setPath(v, routerId);
+                D.setCost(v, link.getCost());
+            } else {
+                D.setCost(v, Integer.MAX_VALUE);
+            }
+        }
+
+        // Loop:
         while (N.size() != NBR_ROUTER) {
-            // find minRouterId not in N such that RIB.getCostToDest(minRouterId) is a minimum
-            int min = Integer.MAX_VALUE, minRouterId = 0;
-            for (int i=0; i < NBR_ROUTER; i+=1) {
-                int destCost = routingInformationBase.getCostToDest(i+1);
-                logger.log("costToDest: " + destCost);
-                if (N.contains(i+1)) continue;
 
-                if (destCost <= min) {
-                    min = destCost;
-                    minRouterId = i+1;
+            // find w not in N such that D(w) is a minimum:
+            int w=-1;
+            int costToW=0;
+            for(int i=1; i<=NBR_ROUTER; i+=1) {
+                if (N.contains(i)) continue;
+                int costToDest = D.getCostToDest(i);
+                if (w == -1 || costToDest < costToW) {
+                    w = i;
+                    costToW = costToDest;
                 }
             }
-            logger.log("min found: " + minRouterId + ": " + min);
-            // Add minRouterId to N
-            if (minRouterId > 0) N.add(minRouterId);
 
-            // update routingInformationBase of neighbors of minRouter, which are not in N
-            for (int i=0; i<NBR_ROUTER; i+=1) {
-                if (N.contains(i+1)) continue;
+            N.add(w);
 
-                int destCost = routingInformationBase.getCostToDest(i+1);
-                if (destCost == Integer.MAX_VALUE) continue;
-
-                LinkCost link = linkStateDB.findLinkCostBetween(i+1, minRouterId);
-                if (link != null) {
-                    int newCost = routingInformationBase.getCostToDest(minRouterId) + link.getCost();
-                    if (newCost < destCost) {
-                        logger.log("newCost < destCost: update!");
-                        routingInformationBase.setCost(i+1, newCost);
-//                                routingInformationBase.setPath(i+1, linkStateDB.findSenderOf());
-                    }
+            // update D(v) for all v adjacent to w and not in N:
+            for (int v=1; v<=NBR_ROUTER; v+=1) {
+                if (N.contains(v)) continue;
+                LinkCost link = linkStateDB.findLinkBetween(v, w);
+                if (link == null) continue;
+                int newCost = D.getCostToDest(w) + link.getCost();
+                if (newCost < D.getCostToDest(v)) {
+                    D.setPath(v, w);
+                    D.setCost(v, newCost);
                 }
             }
         }
+
+        // backtrack predecessor router to find the shortest path to take from routerId
+        for (int dest=1; dest<=NBR_ROUTER; dest+=1) {
+            if (dest == routerId) continue;
+
+            int newCostToDest = D.getCostToDest(dest);
+            if (newCostToDest == Integer.MAX_VALUE || newCostToDest == Integer.MIN_VALUE) continue;
+
+            int oldCostToDest = routingInformationBase.getCostToDest(dest);
+            if (oldCostToDest < newCostToDest) continue;
+
+            int newPathToDest = D.getPath(dest);
+            if (newPathToDest == Integer.MAX_VALUE) continue;
+
+            int prevRouter = dest;
+            int cost = newCostToDest;
+            for ( ;; ) {
+                int currDest = prevRouter;
+                int currCost = cost;
+                logger.log("DEBUG Router.updateRIBWithSPUsingDijkstra() - currDest: " + currDest +", currCost: " + currCost);
+                prevRouter = D.getPath(currDest);
+                currCost = D.getCostToDest(currDest);
+                if (prevRouter == routerId) {
+                    routingInformationBase.setPath(dest, currDest);
+                    routingInformationBase.setCost(dest, D.getCostToDest(dest));
+
+                    logger.log("DEBUG Router.updateRIBWithSPUsingDijkstra() - update routing information R" + routerId
+                            + " -> R" + dest + " -> R" + currDest + ", " + D.getCostToDest(dest));
+                   break;
+                }
+            }
+        }
+
+        logger.log("");
+        logger.log("## Update RIB");
+        printDBs();
     }
 
-    private static void listen() throws Exception {
+    private static void listenLSandHello() throws Exception {
 
         while (true) {
 
@@ -234,9 +279,9 @@ public class Router {
             } else if (receivePacket.getLength() == 20) {
                 linkStateDBUpdated = false;
                 receiveLSPDU();
-//                updateLinkStateDB();
+                updateLinkStateDB();
                 if (linkStateDBUpdated) {
-//                    updateRIBWithSPUsingDijkstra();
+                    updateRIBWithSPUsingDijkstra();
                     sendNeighborsTheLSPDU();
                 }
 
@@ -253,6 +298,6 @@ public class Router {
         receiveCircuitDB();
         sendHello();
 
-        listen();
+        listenLSandHello();
     }
 }

@@ -17,7 +17,6 @@ public class CircuitDB {
     private int nbrLink;
     private LinkCost[] linkCosts = new LinkCost[Router.NBR_ROUTER];
 
-//    private boolean[] receivedHello;
     HashSet<Integer> receivedHello;
 
     public CircuitDB(int nbrLink, LinkCost[] linkCosts) {
@@ -66,16 +65,6 @@ public class CircuitDB {
             updated = true;
         }
         return updated;
-    }
-
-    public byte[] getUDPdata() {
-        ByteBuffer buffer = ByteBuffer.allocate(4 + 8 * Router.NBR_ROUTER);
-        buffer.order(ByteOrder.LITTLE_ENDIAN);
-        buffer.putInt(nbrLink);
-        for (int i=0; i<Router.NBR_ROUTER; i+=1) {
-            buffer.put(linkCosts[i].getUDPdata());
-        }
-        return buffer.array();
     }
 
     public static CircuitDB parseUDPdata(byte[] UDPdata) throws Exception {
