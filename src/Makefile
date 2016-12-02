@@ -3,7 +3,7 @@ DOLLAR:=$$
 all:
 	@echo "Compiling..."
 	@echo "#!/bin/bash" > router
-	@echo 'java Router $(DOLLAR)1 $(DOLLAR)2 $(DOLLAR)3 $(DOLLAR)4' >> router
+	@echo 'java main/Router $(DOLLAR)1 $(DOLLAR)2 $(DOLLAR)3 $(DOLLAR)4' >> router
 	@chmod +x router
 
 	javac main/*.java main/model/*.java

@@ -1,6 +1,7 @@
 package main.model;
 
-import main.MyLogger;
+import main.Logger;
+import main.Router;
 
 import java.util.*;
 
@@ -12,27 +13,40 @@ import java.util.*;
  */
 public class LinkStateDB {
 
-    private MyLogger logger = MyLogger.getInstance();
+    private Logger logger = Logger.getInstance();
     private int routerId;
     private CircuitDB[] linkStateDB;
 
     public LinkStateDB(int routerId) {
         this.routerId = routerId;
-        linkStateDB = new CircuitDB[CircuitDB.NBR_ROUTER];
+        linkStateDB = new CircuitDB[Router.NBR_ROUTER];
     }
 
     public void putCircuitDB(int routerId, CircuitDB circuitDB) {
         linkStateDB[routerId - 1] = circuitDB;
     }
 
-    public void putLinkState(int routerId, LinkCost linkCost) {
+    public boolean putLinkState(int routerId, LinkCost linkCost) {
+        boolean updated;
         if (linkStateDB[routerId - 1] == null){
-            LinkCost[] linkCosts = new LinkCost[CircuitDB.NBR_ROUTER];
+            LinkCost[] linkCosts = new LinkCost[Router.NBR_ROUTER];
             linkCosts[0] = linkCost;
             linkStateDB[routerId - 1] = new CircuitDB(1, linkCosts);
+            updated = true;
         } else {
-            linkStateDB[routerId - 1].putLinkCost(linkCost);
+            updated = linkStateDB[routerId - 1].putLinkCost(linkCost);
         }
+        return updated;
+    }
+
+    public boolean isLinkNeighborOfRouter(int linkId, int routerId) {
+        CircuitDB routerLinkState = linkStateDB[routerId];
+        if (routerLinkState == null) return false;
+        for (int i=0; i<routerLinkState.getNbrLink(); i+=1) {
+            int neighborLink = routerLinkState.getLinkCostAt(i).getLink();
+            if (neighborLink == linkId) return true;
+        }
+        return false;
     }
 
     public LinkCost findLinkCostBetween(int routerId, int minRouterId) {
@@ -61,7 +75,7 @@ public class LinkStateDB {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("# Topology database\n");
 
-        for (int i=0; i<CircuitDB.NBR_ROUTER; i+=1) {
+        for (int i=0; i<Router.NBR_ROUTER; i+=1) {
             if (linkStateDB[i] == null) continue;
             stringBuilder.append(linkStateDB[i].toString(routerId, i+1));
         }

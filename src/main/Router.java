@@ -14,17 +14,23 @@ import java.util.HashSet;
  */
 public class Router {
 
-    private static int routerId, nsePort, routerPort;
+    public static final int NBR_ROUTER = 5;
+
+    public static int routerId;
+
+    private static int nsePort;
+    private static int routerPort;
     private static String nseHost;
 
     private static String logMessage;
-    private static MyLogger logger;
+    private static Logger logger;
 
     private static DatagramSocket udpSocket;
     private static byte[] receiveData = new byte[1024];
 
     private static CircuitDB circuitDB;
     private static LinkStateDB linkStateDB;
+    private static boolean linkStateDBUpdated;
     private static RoutingInformationBase routingInformationBase;    // RIB
 
     private static HelloPacket helloPacket;
@@ -46,13 +52,10 @@ public class Router {
         routerPort = Integer.valueOf(args[3]);
 
         udpSocket = new DatagramSocket(routerPort);
-
-        String logFileName = "router" + routerId + ".log";
-        logger = MyLogger.getInstance(logFileName);
-
         linkStateDB = new LinkStateDB(routerId);
-
         routingInformationBase = new RoutingInformationBase(routerId);
+
+        logger = Logger.getInstance();
     }
 
     private static void sendPacket(DatagramSocket udpSocket, Packet packet, String message) throws IOException {
@@ -66,8 +69,8 @@ public class Router {
     }
 
     private static void printDBs() {
+        logger.log("\n" + linkStateDB.toString());
         logger.log(routingInformationBase.toString());
-        logger.log(linkStateDB.toString());
     }
 
     private static void sendInit() throws IOException {
@@ -75,7 +78,7 @@ public class Router {
         // Each router must send an INIT packet to the NSE (Network State Emulator)
         // containing the router's id
         Packet sendInitPacket = new Packet(routerId);   // INIT packet
-        logMessage = "R" + routerId + " sends an INIT";
+        logMessage = "R" + routerId + " : ---> INIT";
         sendPacket(udpSocket, sendInitPacket, logMessage);
     }
 
@@ -87,7 +90,7 @@ public class Router {
         udpSocket.receive(receiveCircuitDBPacket);            // wait until received
         circuitDB = CircuitDB.parseUDPdata(receiveData);
 
-        logMessage = "R" + routerId + " receives a circuitDB";
+        logMessage = "R" + routerId + " : <--- circuit database";
         logger.log(logMessage);
 
         linkStateDB.putCircuitDB(routerId, circuitDB);
@@ -99,20 +102,22 @@ public class Router {
         for (int i=0; i<circuitDB.getNbrLink(); i+=1) {
             int linkId = circuitDB.getLinkCostAt(i).getLink();
             HelloPacket sendHelloPacket = new HelloPacket(routerId, linkId);
-            logMessage = "R" + routerId + " sends a HELLO: linkId " + linkId;
+            logMessage = "R" + routerId + " : ---> HELLO via link " + linkId;
             sendPacket(udpSocket, sendHelloPacket, logMessage);
         }
     }
 
     private static void receiveHello() throws Exception {
         // Receive HELLO packet
+
         helloPacket = HelloPacket.parseUDPdata(receiveData);
-        logMessage = "R" + routerId + " receives a HELLO from R" + helloPacket.getRouterId() + " via L" + helloPacket.getLinkId();
+        logMessage = "R" + routerId + " : <--- HELLO via link " + + helloPacket.getLinkId() + " from router " + helloPacket.getRouterId();
         logger.log(logMessage);
     }
 
     private static void updateRIBWithHello() {
         // Update RIB
+        logger.log("# update RIB with HELLO");
         routingInformationBase.setPath(helloPacket.getRouterId(), helloPacket.getRouterId());
         routingInformationBase.setCost(helloPacket.getRouterId(), circuitDB.findCostByLink(helloPacket.getLinkId()));
         printDBs();
@@ -126,8 +131,8 @@ public class Router {
             int via = helloPacket.getLinkId();
             LSPDUPacket sendLSPDUPacket =
                     new LSPDUPacket(routerId, routerId, linkId, cost, via);
-            logMessage = "R" + routerId + " sends an LS PDU: sender " + routerId + ", routerId " + routerId
-                    + ", linkId " + linkId + ", cost " + cost + ", via " + via;
+            logMessage = "R" + routerId + " : ---> LS PDU via link " + via
+                    + ": routerId " + routerId + ", linkId " + linkId + ", cost " + cost;
             sendPacket(udpSocket, sendLSPDUPacket, logMessage);
         }
     }
@@ -135,17 +140,23 @@ public class Router {
     private static void receiveLSPDU() throws Exception {
         // Receive LS PDU packet
         lspduPacket = LSPDUPacket.parseUDPdata(receiveData);
-        logMessage = "R" + routerId + " receives an LS PDU: sender " + lspduPacket.getSender()
-                + ", routerId " + lspduPacket.getRouterId() + ", linkId " + lspduPacket.getLinkId()
-                + ", cost " + lspduPacket.getCost() + ", via " + lspduPacket.getVia();
+        logMessage = "R" + routerId + " : <--- LS PDU via link " + lspduPacket.getVia()
+                + " from router " + lspduPacket.getSender() + ": routerId " + lspduPacket.getRouterId()
+                + ", linkId " + lspduPacket.getLinkId() + ", cost " + lspduPacket.getCost();
+
+        // Update its link state database
+        LinkCost linkCost = new LinkCost(lspduPacket.getLinkId(), lspduPacket.getCost());
+        linkStateDBUpdated = linkStateDB.putLinkState(lspduPacket.getRouterId(), linkCost);
+        logMessage += linkStateDBUpdated ? " - Updated" : " - Duplicate";
         logger.log(logMessage);
+        if (linkStateDBUpdated) printDBs();
     }
 
     private static void updateLinkStateDB() {
         // Update its link state database
         LinkCost linkCost = new LinkCost(lspduPacket.getLinkId(), lspduPacket.getCost());
-        linkStateDB.putLinkState(lspduPacket.getRouterId(), linkCost);
-        printDBs();
+        linkStateDBUpdated = linkStateDB.putLinkState(lspduPacket.getRouterId(), linkCost);
+        if (linkStateDBUpdated) printDBs();
     }
 
     private static void sendNeighborsTheLSPDU() throws IOException {
@@ -153,12 +164,13 @@ public class Router {
         for (int i=0; i<circuitDB.getNbrLink(); i+=1) {
             int linkId = circuitDB.getLinkCostAt(i).getLink();
             // except the one that sends the LS PDU and those from which the router did not receive a HELLO
-            if (linkId == lspduPacket.getVia() || !circuitDB.didReceiveHelloFrom(linkId)) continue;
+            if (linkId == lspduPacket.getVia() || !circuitDB.didReceiveHelloFrom(linkId) ) continue;
+//            if (linkStateDB.isLinkNeighborOfRouter(linkId, lspduPacket.getRouterId())) continue;
             lspduPacket.setSender(routerId);
             lspduPacket.setVia(linkId);
-            logMessage = "R" + routerId + " sends an LS PDU: sender " + lspduPacket.getSender()
-                    + ", routerId " + lspduPacket.getRouterId() + ", linkId " + lspduPacket.getLinkId()
-                    + ", cost " + lspduPacket.getCost() + ", via " + lspduPacket.getVia();
+            logMessage = "R" + routerId + " : ---> LS PDU via link " + lspduPacket.getVia()
+                    + ": routerId " + lspduPacket.getRouterId() + ", linkId " + lspduPacket.getLinkId()
+                    + ", cost " + lspduPacket.getCost();
             sendPacket(udpSocket, lspduPacket, logMessage);
         }
     }
@@ -170,10 +182,10 @@ public class Router {
         HashSet<Integer> N = new HashSet<>();
         N.add(routerId);
 
-        while (N.size() != CircuitDB.NBR_ROUTER) {
+        while (N.size() != NBR_ROUTER) {
             // find minRouterId not in N such that RIB.getCostToDest(minRouterId) is a minimum
             int min = Integer.MAX_VALUE, minRouterId = 0;
-            for (int i=0; i<CircuitDB.NBR_ROUTER; i+=1) {
+            for (int i=0; i < NBR_ROUTER; i+=1) {
                 int destCost = routingInformationBase.getCostToDest(i+1);
                 logger.log("costToDest: " + destCost);
                 if (N.contains(i+1)) continue;
@@ -188,7 +200,7 @@ public class Router {
             if (minRouterId > 0) N.add(minRouterId);
 
             // update routingInformationBase of neighbors of minRouter, which are not in N
-            for (int i=0; i<CircuitDB.NBR_ROUTER; i+=1) {
+            for (int i=0; i<NBR_ROUTER; i+=1) {
                 if (N.contains(i+1)) continue;
 
                 int destCost = routingInformationBase.getCostToDest(i+1);
@@ -220,15 +232,20 @@ public class Router {
                 circuitDB.setReceivedHelloFrom(helloPacket.getLinkId());
                 respondToHelloWithSetOfLSPDUs();
             } else if (receivePacket.getLength() == 20) {
+                linkStateDBUpdated = false;
                 receiveLSPDU();
-                updateLinkStateDB();
-                sendNeighborsTheLSPDU();
-                updateRIBWithSPUsingDijkstra();
+//                updateLinkStateDB();
+                if (linkStateDBUpdated) {
+//                    updateRIBWithSPUsingDijkstra();
+                    sendNeighborsTheLSPDU();
+                }
+
             }
         }
     }
 
     public static void main(String[] args) throws Exception {
+
         checkArgs(args);
         initialize(args);
 

@@ -11,8 +11,6 @@ import java.nio.ByteOrder;
  */
 public class Packet {
 
-    private final int NBR_ROUTER = 5;
-
     protected int routerId;
 
     public Packet(int routerId) {

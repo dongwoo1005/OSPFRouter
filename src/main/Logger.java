@@ -10,12 +10,12 @@ import java.io.PrintWriter;
  * on 11/26/16
  * d3son@uwaterloo.ca
  */
-public class MyLogger {
+public class Logger {
 
     private PrintWriter logWriter = null;
 
-    private static MyLogger instance = null;
-    private MyLogger(String logFileName) throws IOException {
+    private static Logger instance = null;
+    private Logger(String logFileName) throws IOException {
         // Exists only to defeat instantiation.
         File logFile = new File(logFileName);
         if (logFile.exists()) logFile.delete();
@@ -23,14 +23,15 @@ public class MyLogger {
         logWriter = new PrintWriter(logFileName, "UTF-8");
     }
 
-    public static MyLogger getInstance(String logFileName) throws IOException {
+    public static Logger getInstance() {
         if(instance == null) {
-            instance = new MyLogger(logFileName);
+            try {
+                String logFileName = "router" + Router.routerId + ".log";
+                instance = new Logger(logFileName);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
-        return instance;
-    }
-
-    public static MyLogger getInstance() {
         return instance;
     }
 

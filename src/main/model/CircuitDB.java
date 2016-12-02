@@ -1,5 +1,7 @@
 package main.model;
 
+import main.Router;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.HashSet;
@@ -12,10 +14,8 @@ import java.util.HashSet;
  */
 public class CircuitDB {
 
-    public static final int NBR_ROUTER = 5;
-
     private int nbrLink;
-    private LinkCost[] linkCosts = new LinkCost[NBR_ROUTER];
+    private LinkCost[] linkCosts = new LinkCost[Router.NBR_ROUTER];
 
 //    private boolean[] receivedHello;
     HashSet<Integer> receivedHello;
@@ -47,24 +47,32 @@ public class CircuitDB {
         receivedHello.add(linkId);
     }
 
-    public void putLinkCost(LinkCost linkCost) {
+    public boolean putLinkCost(LinkCost linkCost) {
+        boolean updated = false;
         for (int i=0; i<nbrLink; i+=1) {
             if (linkCosts[i].getLink() == linkCost.getLink()) {
-                linkCosts[i].setCost(linkCost.getCost());
-                return;
+                if (linkCost.getCost() != linkCosts[i].getCost()) {
+                    linkCosts[i].setCost(linkCost.getCost());
+                    updated = true;
+                } else {
+                    updated = false;
+                }
+                return updated;
             }
         }
-        if (nbrLink != NBR_ROUTER - 1) {
+        if (nbrLink != Router.NBR_ROUTER - 1) {
             linkCosts[nbrLink] = linkCost;
             nbrLink += 1;
+            updated = true;
         }
+        return updated;
     }
 
     public byte[] getUDPdata() {
-        ByteBuffer buffer = ByteBuffer.allocate(4 + 8 * NBR_ROUTER);
+        ByteBuffer buffer = ByteBuffer.allocate(4 + 8 * Router.NBR_ROUTER);
         buffer.order(ByteOrder.LITTLE_ENDIAN);
         buffer.putInt(nbrLink);
-        for (int i=0; i<NBR_ROUTER; i+=1) {
+        for (int i=0; i<Router.NBR_ROUTER; i+=1) {
             buffer.put(linkCosts[i].getUDPdata());
         }
         return buffer.array();
@@ -74,7 +82,7 @@ public class CircuitDB {
         ByteBuffer buffer = ByteBuffer.wrap(UDPdata);
         buffer.order(ByteOrder.LITTLE_ENDIAN);
         int nbrLink = buffer.getInt();
-        LinkCost[] linkCosts = new LinkCost[NBR_ROUTER];
+        LinkCost[] linkCosts = new LinkCost[Router.NBR_ROUTER];
         for (int i=0; i<nbrLink; i+=1) {
             byte data[] = new byte[8];
             buffer.get(data, 0, 8);

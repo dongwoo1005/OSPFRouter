@@ -1,5 +1,7 @@
 package main.model;
 
+import main.Router;
+
 /**
  * OSPFRouter
  * Created by dwson Son (20420487)
@@ -13,7 +15,7 @@ public class RoutingInformationBase {
 
     public RoutingInformationBase(int routerId) {
         this.routerId = routerId;
-        routingInformationBase = new RoutingInformation[CircuitDB.NBR_ROUTER];
+        routingInformationBase = new RoutingInformation[Router.NBR_ROUTER];
         routingInformationBase[routerId - 1] = new RoutingInformation(RoutingInformation.LOCAL, 0);
     }
 
@@ -40,7 +42,7 @@ public class RoutingInformationBase {
     public String toString() {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("# RIB\n");
-        for (int i=0; i<CircuitDB.NBR_ROUTER; i+=1) {
+        for (int i = 0; i< Router.NBR_ROUTER; i+=1) {
             stringBuilder.append("R");
             stringBuilder.append(routerId);
             stringBuilder.append(" -> R");
